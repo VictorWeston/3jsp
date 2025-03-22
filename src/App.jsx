@@ -16,14 +16,28 @@ import { gsap } from 'gsap'
 
 // Array of slide paths - replace with your actual slide paths
 const slidePaths = [
-  '/slides/slide1.jpg',
-  '/slides/slide2.jpg',
-  '/slides/slide3.jpg',
-  '/slides/slide4.jpg',
-  '/slides/slide5.jpg',
+  '/slides/slide-1.jpg',
+  '/slides/slide-2.jpg',
+  // '/slides/slide-3.jpg',
+  // '/slides/slide-4.jpg',
+  // '/slides/slide-5.jpg',
+  '/slides/slide-6.jpg',
+  '/slides/slide-7.jpg',
+  '/slides/slide-8.jpg',
+  '/slides/slide-9.jpg',
+  '/slides/slide-10.jpg',
+  '/slides/slide-11.jpg',
+  '/slides/slide-12.jpg',
+  '/slides/slide-13.jpg',
+  '/slides/slide-14.jpg',
+  '/slides/slide-15.jpg',
+  '/slides/slide-16.jpg',
+  '/slides/slide-17.jpg',
+  '/slides/slide-18.jpg',
+  '/slides/slide-19.jpg',
 ]
 
-// Slide component
+// Slide component - update the handleClick function
 function Slide({ texture, index, currentSlide, totalSlides, onClick, position }) {
   const meshRef = useRef()
   const isActive = index === currentSlide
@@ -56,19 +70,13 @@ function Slide({ texture, index, currentSlide, totalSlides, onClick, position })
     })
   }, [currentSlide, index])
   
-  // Click animation - lay down slide
+  // Click animation - zoom effect instead of laying down
   const handleClick = () => {
     if (!isActive) return
     
-    // Animate slide to lay down
-    gsap.to(meshRef.current.rotation, {
-      x: meshRef.current.rotation.x === 0 ? -Math.PI * 0.5 : 0,
-      duration: 1,
-      ease: "back.inOut(2)",
-      onComplete: () => {
-        if (onClick) onClick()
-      }
-    })
+    // Don't animate the slide itself, just trigger the callback
+    // for the camera zoom effect
+    if (onClick) onClick()
   }
   
   // Calculate aspect ratio to prevent stretching
@@ -95,40 +103,48 @@ function Slide({ texture, index, currentSlide, totalSlides, onClick, position })
   )
 }
 
-// Camera controller for presentation
+// Camera controller for presentation with improved transitions
 function PresentationCamera({ slideLayedDown }) {
   const { camera } = useThree()
+  const initialPosRef = useRef({ x: 0, y: 0, z: 2 })
+  const isInitializedRef = useRef(false)
   
   useEffect(() => {
-    // Initial camera position
-    camera.position.set(0, 0, 2)
-    camera.lookAt(0, 0, 0)
+    // Save initial camera position on first render
+    if (!isInitializedRef.current) {
+      initialPosRef.current = {
+        x: camera.position.x,
+        y: camera.position.y,
+        z: camera.position.z
+      }
+      isInitializedRef.current = true
+      
+      // Set initial position
+      camera.position.set(0, 0, 2)
+      camera.lookAt(0, 0, 0)
+    }
     
-    // Animate camera when slide lays down
+    // Animate camera to zoom into slide
     if (slideLayedDown) {
       gsap.to(camera.position, {
-        y: 0.3, // Look slightly up
-        duration: 0.8,
-        ease: "power2.inOut",
-      })
-      gsap.to(camera.rotation, {
-        x: -Math.PI * 0.1, // Look slightly up
-        duration: 0.8,
+        z: 0.7, // Zoom in closer to the slide
+        duration: 1.2,
         ease: "power2.inOut",
       })
     } else {
+      // Ensure we have a smooth transition back to the initial position
       gsap.to(camera.position, {
-        y: 0,
-        duration: 0.8,
+        z: initialPosRef.current.z, // Use the saved initial position
+        duration: 1,
         ease: "power2.inOut", 
-      })
-      gsap.to(camera.rotation, {
-        x: 0,
-        duration: 0.8,
-        ease: "power2.inOut",
       })
     }
   }, [camera, slideLayedDown])
+  
+  // Update camera position on each frame to ensure smooth transitions
+  useFrame(() => {
+    camera.lookAt(0, 0, 0)
+  })
   
   return null
 }
@@ -285,6 +301,33 @@ function Slideshow() {
   )
 }
 
+// Rotating stars component
+function RotatingStars() {
+  const starsRef = useRef()
+  
+  // Apply slow rotation animation
+  useFrame(({ clock }) => {
+    if (starsRef.current) {
+      // Extremely slow rotation - adjust the multipliers to change speed
+      starsRef.current.rotation.y = clock.getElapsedTime() * 0.02
+      starsRef.current.rotation.x = Math.sin(clock.getElapsedTime() * 0.01) * 0.01
+    }
+  })
+  
+  return (
+    <group ref={starsRef}>
+      <Stars 
+        radius={100} 
+        depth={50} 
+        count={5000} 
+        factor={4} 
+        saturation={0}
+        fade
+      />
+    </group>
+  )
+}
+
 // Main App component
 export default function App() {
   const [showStats, setShowStats] = useState(false)
@@ -323,14 +366,7 @@ export default function App() {
         {/* Night sky with stars */}
         <color attach="background" args={['#020209']} />
         <fog attach="fog" args={['#020209', 10, 50]} />
-        <Stars 
-          radius={100} 
-          depth={50} 
-          count={5000} 
-          factor={4} 
-          saturation={0}
-          fade
-        />
+        <RotatingStars />
         
         {/* Ambient lighting */}
         <ambientLight intensity={0.5} color="#ffffff" />
