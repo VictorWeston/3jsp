@@ -34,32 +34,50 @@ const slidePaths = [
   '/slides/slide-16.jpg',
   '/slides/slide-17.jpg',
   '/slides/slide-18.jpg',
-  '/slides/slide-19.jpg',
+  // '/slides/slide-19.jpg',
 ]
 
-// Slide component - update the handleClick function
+// Slide component for circular arrangement
 function Slide({ texture, index, currentSlide, totalSlides, onClick, position }) {
   const meshRef = useRef()
   const isActive = index === currentSlide
   
-  // Animation when slide changes
+  // Animation when slide changes - now animate rotation around a circle
   useEffect(() => {
     if (!meshRef.current) return
     
-    const offset = index - currentSlide
+    // Calculate the angle for this slide based on current position in the carousel
+    const slideAngle = ((index - currentSlide) * (2 * Math.PI / totalSlides))
     
-    // Position slides horizontally
+    // Calculate the radius of the circle based on number of slides
+    const radius = Math.max(2.5, totalSlides * 0.25) // Adjust as needed
+    
+    // Calculate the new position on the circle
+    const x = Math.sin(slideAngle) * radius
+    const z = Math.cos(slideAngle) * radius - radius // Offset to place current slide in front
+    
+    // Animate the slide to its new position
     gsap.to(meshRef.current.position, {
-      x: offset * 1.5,
-      duration: 0.8,
+      x: x,
+      z: z,
+      duration: 1.2,
+      ease: "power3.inOut"
+    })
+    
+    // Rotate slide to face the camera
+    gsap.to(meshRef.current.rotation, {
+      y: -slideAngle,
+      duration: 1.2,
       ease: "power3.inOut"
     })
     
     // Set opacity based on distance from current slide
-    const targetOpacity = Math.abs(offset) > 2 ? 0 : 1 - Math.abs(offset) * 0.3
+    const distance = Math.abs(((index - currentSlide + totalSlides / 2) % totalSlides) - totalSlides / 2) / (totalSlides / 2)
+    const targetOpacity = 1 - distance * 0.7
+    
     gsap.to(meshRef.current.material, {
       opacity: targetOpacity,
-      duration: 0.5,
+      duration: 0.8,
     })
     
     // Scale active slide slightly
@@ -68,14 +86,11 @@ function Slide({ texture, index, currentSlide, totalSlides, onClick, position })
       y: isActive ? 1.05 : 1,
       duration: 0.5,
     })
-  }, [currentSlide, index])
+  }, [currentSlide, index, totalSlides])
   
-  // Click animation - zoom effect instead of laying down
+  // Click animation - zoom effect
   const handleClick = () => {
     if (!isActive) return
-    
-    // Don't animate the slide itself, just trigger the callback
-    // for the camera zoom effect
     if (onClick) onClick()
   }
   
@@ -124,19 +139,27 @@ function PresentationCamera({ slideLayedDown }) {
       camera.lookAt(0, 0, 0)
     }
     
-    // Animate camera to zoom into slide
+    // Animate camera to zoom into or out of slide
     if (slideLayedDown) {
       gsap.to(camera.position, {
         z: 0.7, // Zoom in closer to the slide
         duration: 1.2,
         ease: "power2.inOut",
+        onComplete: () => {
+          // Ensure camera stays looking at the center
+          camera.lookAt(0, 0, 0)
+        }
       })
     } else {
       // Ensure we have a smooth transition back to the initial position
       gsap.to(camera.position, {
         z: initialPosRef.current.z, // Use the saved initial position
         duration: 1,
-        ease: "power2.inOut", 
+        ease: "power2.inOut",
+        onComplete: () => {
+          // Ensure camera returns to original position
+          camera.lookAt(0, 0, 0)
+        }
       })
     }
   }, [camera, slideLayedDown])
@@ -155,34 +178,49 @@ function Slideshow() {
   const [slideLayedDown, setSlideLayedDown] = useState(false)
   const textures = useLoader(THREE.TextureLoader, slidePaths)
   
-  // Navigate to previous slide
+  // Navigate to previous slide - with looping
   const prevSlide = () => {
-    if (slideLayedDown) return
-    setCurrentSlide(current => (current > 0 ? current - 1 : current))
+    // Allow navigation in zoomed state too
+    setCurrentSlide(current => (current > 0 ? current - 1 : textures.length - 1)) // Loop back to end
   }
   
-  // Navigate to next slide
+  // Navigate to next slide - with looping
   const nextSlide = () => {
-    if (slideLayedDown) return
-    setCurrentSlide(current => (current < textures.length - 1 ? current + 1 : current))
+    // Allow navigation in zoomed state too
+    setCurrentSlide(current => (current < textures.length - 1 ? current + 1 : 0)) // Loop back to start
   }
   
-  // Toggle slide laydown state
   const toggleSlideLaydown = () => {
-    setSlideLayedDown(!slideLayedDown)
+    // Toggle the state directly, making sure it flips every time
+    setSlideLayedDown(prevState => !prevState)
   }
 
-  // Keyboard controls
+  // Update keyboard controls
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') prevSlide()
       if (e.key === 'ArrowRight') nextSlide()
-      if (e.key === ' ' || e.key === 'Enter') toggleSlideLaydown()
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault() // Prevent default behavior for space/enter
+        toggleSlideLaydown() // Toggle presentation mode
+      }
     }
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [slideLayedDown])
+  }, [])
+  
+  // Calculate initial positions for slides in a circle
+  const getInitialPosition = (index) => {
+    const radius = Math.max(2.5, textures.length * 0.25) // Same radius calculation as in Slide component
+    const angle = (index * (2 * Math.PI / textures.length))
+    
+    return [
+      Math.sin(angle) * radius, // x
+      0, // y
+      Math.cos(angle) * radius - radius // z (with offset to place current at 0)
+    ]
+  }
   
   return (
     <>
@@ -196,7 +234,7 @@ function Slideshow() {
           currentSlide={currentSlide}
           totalSlides={textures.length}
           onClick={toggleSlideLaydown}
-          position={[index * 1.5, 0, 0]}
+          position={getInitialPosition(index)}
         />
       ))}
       
@@ -214,7 +252,6 @@ function Slideshow() {
       }}>
         <button
           onClick={prevSlide}
-          disabled={currentSlide === 0 || slideLayedDown}
           style={{
             background: 'rgba(0,0,0,0.5)',
             color: 'white',
@@ -226,8 +263,7 @@ function Slideshow() {
             minHeight: '50px', // Prevent shrinking
             fontSize: '24px',  // Slightly larger font
             fontFamily: 'sans-serif', // Consistent font
-            cursor: currentSlide === 0 || slideLayedDown ? 'default' : 'pointer',
-            opacity: currentSlide === 0 || slideLayedDown ? 0.3 : 1,
+            cursor: 'pointer',
             pointerEvents: 'auto',
             display: 'flex',   // Center the arrow
             alignItems: 'center',
@@ -241,7 +277,6 @@ function Slideshow() {
         </button>
         <button
           onClick={nextSlide}
-          disabled={currentSlide === textures.length - 1 || slideLayedDown}
           style={{
             background: 'rgba(0,0,0,0.5)',
             color: 'white',
@@ -253,8 +288,7 @@ function Slideshow() {
             minHeight: '50px', // Prevent shrinking
             fontSize: '24px',  // Slightly larger font
             fontFamily: 'sans-serif', // Consistent font
-            cursor: currentSlide === textures.length - 1 || slideLayedDown ? 'default' : 'pointer',
-            opacity: currentSlide === textures.length - 1 || slideLayedDown ? 0.3 : 1,
+            cursor: 'pointer',
             pointerEvents: 'auto',
             display: 'flex',   // Center the arrow
             alignItems: 'center',
