@@ -16,13 +16,13 @@ import { gsap } from 'gsap'
 
 // Array of slide paths - replace with your actual slide paths
 const slidePaths = [
-  '/slides/slide-1.jpg',
+  // '/slides/slide-1.jpg',
   '/slides/slide-2.jpg',
-  // '/slides/slide-3.jpg',
-  // '/slides/slide-4.jpg',
+  '/slides/slide-3.jpg',
+  '/slides/slide-4.jpg',
   // '/slides/slide-5.jpg',
-  '/slides/slide-6.jpg',
-  '/slides/slide-7.jpg',
+  // '/slides/slide-6.jpg',
+  // '/slides/slide-7.jpg',
   '/slides/slide-8.jpg',
   '/slides/slide-9.jpg',
   '/slides/slide-10.jpg',
