@@ -1,439 +1,342 @@
 // src/App.jsx
-import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Box, Plane } from '@react-three/drei'
-import { DragControls } from '@react-three/drei'
-import { useGLTF, Html } from '@react-three/drei'
-import { useEffect, useState, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
-import gsap from 'gsap'
-import { Vector3, Euler, Quaternion  } from 'three'
+import { Canvas, useFrame, useLoader } from '@react-three/fiber'
+import { 
+  OrbitControls, 
+  Stars,
+  useGLTF,
+  Stats,
+  Html,
+  useBounds,
+  PerspectiveCamera
+} from '@react-three/drei'
+import { useState, useEffect, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
-import { Physics, useBox, usePlane } from '@react-three/cannon'
+import * as THREE from 'three'
+import { gsap } from 'gsap'
 
+// Array of slide paths - replace with your actual slide paths
+const slidePaths = [
+  '/slides/slide1.jpg',
+  '/slides/slide2.jpg',
+  '/slides/slide3.jpg',
+  '/slides/slide4.jpg',
+  '/slides/slide5.jpg',
+]
 
-function DraggableBox() {
-  return (
-    <DragControls>
-      <Box position={[0, 2, 0]}>
-        <meshStandardMaterial color="limegreen" />
-      </Box>
-    </DragControls>
-  )
-}
-
-function InteractiveBox() {
-  const [hovered, setHovered] = useState(false)
+// Slide component
+function Slide({ texture, index, currentSlide, totalSlides, onClick, position }) {
   const meshRef = useRef()
-
-  return (
-    <Box
-      ref={meshRef}
-      position={[0, 1, 0]}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-      onClick={() => {
-        gsap.to(meshRef.current.position, {
-          y: Math.random() * 3,
-          duration: 0.5
-        })
-      }}
-    >
-      <meshStandardMaterial 
-        color={hovered ? "hotpink" : "orange"} 
-        metalness={hovered ? 1 : 0.5}
-      />
-    </Box>
-  )
-}
-
-function RotatingBox() {
-  const meshRef = useRef()
+  const isActive = index === currentSlide
   
-  useFrame((state, delta) => {
-    meshRef.current.rotation.y += delta // delta = time since last frame
-  })
-
-  return (
-    <DragControls>
-    <Box ref={meshRef}>
-      <meshStandardMaterial color="cyan" />
-    </Box>
-    </DragControls>
-  )
-}
-//free_car_001.gltf
-function RotatingModel({ url }) {
-  const { scene, nodes, materials } = useGLTF(url)
-  const [clicked, setClicked] = useState(false)
-  const modelRef = useRef()
-  const [time, setTime] = useState(0)
-  
-  
-  useFrame((state, delta) => {
-    if (modelRef.current) {
-      modelRef.current.rotation.y += delta * 0.5 // Rotate at half speed
-
-      // Update time for animations
-      setTime(prevTime => prevTime + delta)
-      
-      // Scale animation (pulsing effect)
-      const scaleBase = clicked ? 1.2 : 1
-      const scaleVariation = 0.1 * Math.sin(time * 2) // Subtle pulsing effect
-      modelRef.current.scale.set(
-        scaleBase + scaleVariation,
-        scaleBase + scaleVariation,
-        scaleBase + scaleVariation
-      )
-      
-      // Y-axis movement (floating up and down)
-      const yPosition = 0.3 * Math.sin(time * 1.5) // Smooth up and down movement
-      modelRef.current.position.y = yPosition
-
-    }
-  })
-  return (
-    <DragControls>
-    <primitive 
-      ref={modelRef}
-      object={scene}
-      scale={clicked ? 1.2 : 1}
-      onClick={() => setClicked(!clicked)}
-      onPointerOver={() => document.body.style.cursor = 'pointer'}
-      onPointerOut={() => document.body.style.cursor = 'auto'}
-    >
-    </primitive>
-    <Html distanceFactor={10} position={[0, 15, 0]}>
-        <div className="model-label"style={{
-            fontSize: '5rem',
-            fontWeight: 'bold',
-            color: 'white',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            textShadow: '2px 2px 4px rgba(0, 0, 0, 0.7)'
-          }}>Click me!</div>
-      </Html>
-    </DragControls>
-  )
-}
-
-
-// Camera controller component
-function CameraController({ cameraPositions, lookAtPoint }) {
-  const { camera } = useThree()
-  const [currentPositionIndex, setCurrentPositionIndex] = useState(0)
-  const [isAnimating, setIsAnimating] = useState(false)
-  
-  // Set initial camera position and lookAt
+  // Animation when slide changes
   useEffect(() => {
-    if (cameraPositions.length > 0) {
-      camera.position.copy(cameraPositions[0])
-      camera.lookAt(lookAtPoint)
-    }
-  }, [])
+    if (!meshRef.current) return
+    
+    const offset = index - currentSlide
+    
+    // Position slides horizontally
+    gsap.to(meshRef.current.position, {
+      x: offset * 1.5,
+      duration: 0.8,
+      ease: "power3.inOut"
+    })
+    
+    // Set opacity based on distance from current slide
+    const targetOpacity = Math.abs(offset) > 2 ? 0 : 1 - Math.abs(offset) * 0.3
+    gsap.to(meshRef.current.material, {
+      opacity: targetOpacity,
+      duration: 0.5,
+    })
+    
+    // Scale active slide slightly
+    gsap.to(meshRef.current.scale, {
+      x: isActive ? 1.05 : 1,
+      y: isActive ? 1.05 : 1,
+      duration: 0.5,
+    })
+  }, [currentSlide, index])
   
-  // Function to move camera to a specific position
-  const moveCamera = (index) => {
-    if (isAnimating || index === currentPositionIndex) return
+  // Click animation - lay down slide
+  const handleClick = () => {
+    if (!isActive) return
     
-    setIsAnimating(true)
-    
-    // Animate camera movement
-    gsap.to(camera.position, {
-      x: cameraPositions[index].x,
-      y: cameraPositions[index].y,
-      z: cameraPositions[index].z,
-      duration: 1.5,
-      ease: "power2.inOut",
-      onUpdate: () => {
-        camera.lookAt(lookAtPoint)
-      },
+    // Animate slide to lay down
+    gsap.to(meshRef.current.rotation, {
+      x: meshRef.current.rotation.x === 0 ? -Math.PI * 0.5 : 0,
+      duration: 1,
+      ease: "back.inOut(2)",
       onComplete: () => {
-        setCurrentPositionIndex(index)
-        setIsAnimating(false)
+        if (onClick) onClick()
       }
     })
   }
   
-  // Render camera control buttons
-  return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <div className="camera-controls" style={{
-        position: 'absolute',
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: '10px',
-        pointerEvents: 'auto'
-      }}>
-        {cameraPositions.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => moveCamera(index)}
-            disabled={isAnimating || index === currentPositionIndex}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: index === currentPositionIndex ? '#4CAF50' : '#2196F3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: isAnimating ? 'not-allowed' : 'pointer',
-              opacity: isAnimating ? 0.7 : 1
-            }}
-          >
-            View {index + 1}
-          </button>
-        ))}
-      </div>
-    </Html>
-  )
-}
-
-// Ground plane with collision
-function Ground() {
-  const [ref] = usePlane(() => ({ 
-    rotation: [-Math.PI / 2, 0, 0], // Rotated to be horizontal
-    position: [0, -1, 0],
-    type: 'Static'
-  }))
+  // Calculate aspect ratio to prevent stretching
+  const aspectRatio = texture.image ? texture.image.width / texture.image.height : 16/9
+  const slideWidth = 1
+  const slideHeight = slideWidth / aspectRatio
   
   return (
-    <Plane 
-      ref={ref} 
-      args={[20, 20]} 
-      receiveShadow
+    <mesh
+      ref={meshRef}
+      position={position}
+      onClick={handleClick}
+      onPointerOver={() => document.body.style.cursor = isActive ? 'pointer' : 'default'}
+      onPointerOut={() => document.body.style.cursor = 'default'}
     >
-      <meshStandardMaterial color="#303030" />
-    </Plane>
+      <planeGeometry args={[slideWidth, slideHeight]} />
+      <meshBasicMaterial 
+        map={texture} 
+        side={THREE.DoubleSide} 
+        transparent
+        opacity={1}
+      />
+    </mesh>
   )
 }
 
-// Player cube with WASD controls
-function PlayerCube({ followCamera }) {
-  const [cubeRef, api] = useBox(() => ({ 
-    mass: 1,
-    position: [0, 0, 0],
-    args: [1, 1, 1]
-  }))
-  
-  const velocity = useRef([0, 0, 0])
-  const position = useRef([0, 0, 0])
-  const [moveDirection, setMoveDirection] = useState({ forward: 0, right: 0 })
-  const speed = 5
+// Camera controller for presentation
+function PresentationCamera({ slideLayedDown }) {
   const { camera } = useThree()
-  const cameraAngle = useRef(0) // Camera angle around player
   
-  // Store velocity and position
   useEffect(() => {
-    const unsubVelocity = api.velocity.subscribe(v => velocity.current = v)
-    const unsubPosition = api.position.subscribe(p => position.current = p)
-    return () => {
-      unsubVelocity()
-      unsubPosition()
+    // Initial camera position
+    camera.position.set(0, 0, 2)
+    camera.lookAt(0, 0, 0)
+    
+    // Animate camera when slide lays down
+    if (slideLayedDown) {
+      gsap.to(camera.position, {
+        y: 0.3, // Look slightly up
+        duration: 0.8,
+        ease: "power2.inOut",
+      })
+      gsap.to(camera.rotation, {
+        x: -Math.PI * 0.1, // Look slightly up
+        duration: 0.8,
+        ease: "power2.inOut",
+      })
+    } else {
+      gsap.to(camera.position, {
+        y: 0,
+        duration: 0.8,
+        ease: "power2.inOut", 
+      })
+      gsap.to(camera.rotation, {
+        x: 0,
+        duration: 0.8,
+        ease: "power2.inOut",
+      })
     }
-  }, [api])
+  }, [camera, slideLayedDown])
   
+  return null
+}
+
+// Slideshow controller
+function Slideshow() {
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const [slideLayedDown, setSlideLayedDown] = useState(false)
+  const textures = useLoader(THREE.TextureLoader, slidePaths)
+  
+  // Navigate to previous slide
+  const prevSlide = () => {
+    if (slideLayedDown) return
+    setCurrentSlide(current => (current > 0 ? current - 1 : current))
+  }
+  
+  // Navigate to next slide
+  const nextSlide = () => {
+    if (slideLayedDown) return
+    setCurrentSlide(current => (current < textures.length - 1 ? current + 1 : current))
+  }
+  
+  // Toggle slide laydown state
+  const toggleSlideLaydown = () => {
+    setSlideLayedDown(!slideLayedDown)
+  }
+
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e) => {
-      switch(e.key.toLowerCase()) {
-        case 'w': setMoveDirection(prev => ({ ...prev, forward: 1 })); break
-        case 's': setMoveDirection(prev => ({ ...prev, forward: -1 })); break
-        case 'a': setMoveDirection(prev => ({ ...prev, right: -1 })); break // Left is negative
-        case 'd': setMoveDirection(prev => ({ ...prev, right: 1 })); break  // Right is positive
-        case 'q': if(followCamera) cameraAngle.current -= 0.1; break // Rotate camera left
-        case 'e': if(followCamera) cameraAngle.current += 0.1; break // Rotate camera right
-      }
+      if (e.key === 'ArrowLeft') prevSlide()
+      if (e.key === 'ArrowRight') nextSlide()
+      if (e.key === ' ' || e.key === 'Enter') toggleSlideLaydown()
     }
     
-    const handleKeyUp = (e) => {
-      switch(e.key.toLowerCase()) {
-        case 'w': case 's': setMoveDirection(prev => ({ ...prev, forward: 0 })); break
-        case 'a': case 'd': setMoveDirection(prev => ({ ...prev, right: 0 })); break
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [slideLayedDown])
+  
+  return (
+    <>
+      <PresentationCamera slideLayedDown={slideLayedDown} />
+      
+      {textures.map((texture, index) => (
+        <Slide 
+          key={index}
+          texture={texture}
+          index={index}
+          currentSlide={currentSlide}
+          totalSlides={textures.length}
+          onClick={toggleSlideLaydown}
+          position={[index * 1.5, 0, 0]}
+        />
+      ))}
+      
+      {/* Navigation buttons */}
+      <Html fullscreen style={{ pointerEvents: 'none' }}>
+          <div style={{
+        position: 'absolute',
+        bottom: '50%',
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        pointerEvents: 'none',
+        transform: 'translateY(25px)' // Center vertically
+      }}>
+        <button
+          onClick={prevSlide}
+          disabled={currentSlide === 0 || slideLayedDown}
+          style={{
+            background: 'rgba(0,0,0,0.5)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '50%',
+            width: '50px',
+            height: '50px',
+            minWidth: '50px',  // Prevent shrinking
+            minHeight: '50px', // Prevent shrinking
+            fontSize: '24px',  // Slightly larger font
+            fontFamily: 'sans-serif', // Consistent font
+            cursor: currentSlide === 0 || slideLayedDown ? 'default' : 'pointer',
+            opacity: currentSlide === 0 || slideLayedDown ? 0.3 : 1,
+            pointerEvents: 'auto',
+            display: 'flex',   // Center the arrow
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0',      // Remove default padding
+            lineHeight: '1',   // Improve vertical centering
+            boxShadow: '0 2px 5px rgba(0,0,0,0.3)' // Subtle shadow
+          }}
+        >
+          ←
+        </button>
+        <button
+          onClick={nextSlide}
+          disabled={currentSlide === textures.length - 1 || slideLayedDown}
+          style={{
+            background: 'rgba(0,0,0,0.5)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '50%',
+            width: '50px',
+            height: '50px',
+            minWidth: '50px',  // Prevent shrinking
+            minHeight: '50px', // Prevent shrinking
+            fontSize: '24px',  // Slightly larger font
+            fontFamily: 'sans-serif', // Consistent font
+            cursor: currentSlide === textures.length - 1 || slideLayedDown ? 'default' : 'pointer',
+            opacity: currentSlide === textures.length - 1 || slideLayedDown ? 0.3 : 1,
+            pointerEvents: 'auto',
+            display: 'flex',   // Center the arrow
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0',      // Remove default padding
+            lineHeight: '1',   // Improve vertical centering
+            boxShadow: '0 2px 5px rgba(0,0,0,0.3)' // Subtle shadow
+          }}
+        >
+          →
+        </button>
+      </div>
+        
+        {/* Slide counter */}
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          right: '20px',
+          background: 'rgba(0,0,0,0.7)',
+          color: 'white',
+          padding: '5px 10px',
+          borderRadius: '5px',
+          fontFamily: 'Arial, sans-serif'
+        }}>
+          {currentSlide + 1} / {textures.length}
+        </div>
+        
+        {/* Instructions */}
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '20px',
+          background: 'rgba(0,0,0,0.7)',
+          color: 'white',
+          padding: '10px',
+          borderRadius: '5px',
+          fontFamily: 'Arial, sans-serif'
+        }}>
+          <p>← → : Navigate slides</p>
+          <p>Click slide: Toggle presentation mode</p>
+        </div>
+      </Html>
+    </>
+  )
+}
+
+// Main App component
+export default function App() {
+  const [showStats, setShowStats] = useState(false)
+  
+  // Toggle performance stats with 'S' key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key.toLowerCase() === 's') {
+        setShowStats(prev => !prev)
       }
     }
     
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-    }
-  }, [followCamera])
-  
-  // Move cube based on camera direction
-  useFrame(() => {
-    if (moveDirection.forward === 0 && moveDirection.right === 0) return
-    
-    // Get camera direction vectors
-    const cameraDirection = new Vector3()
-    camera.getWorldDirection(cameraDirection)
-    cameraDirection.y = 0
-    cameraDirection.normalize()
-    
-    // Get right vector (perpendicular to camera direction)
-    // Fix the direction by switching the signs
-    const rightVector = new Vector3(
-      -cameraDirection.z,  // Fix: negate this value
-      0,
-      cameraDirection.x   // Fix: make this positive
-    ).normalize()
-    
-    // Calculate movement vector
-    const moveVector = new Vector3()
-    moveVector.addScaledVector(cameraDirection, moveDirection.forward * speed)
-    moveVector.addScaledVector(rightVector, moveDirection.right * speed)
-    
-    // Apply velocity
-    api.velocity.set(moveVector.x, velocity.current[1], moveVector.z)
-    
-    // Apply rotation based on movement direction
-    if (moveVector.length() > 0) {
-      const targetRotation = Math.atan2(moveVector.x, moveVector.z)
-      const currentEuler = new Euler(0, 0, 0, 'YXZ')
-      const targetQuaternion = new Quaternion().setFromEuler(
-        currentEuler.set(0, targetRotation, 0)
-      )
-      
-      api.rotation.copy(targetQuaternion)
-    }
-  })
-  
-  // Update camera position if follow mode is enabled
-  useFrame(() => {
-    if (followCamera) {
-      const [x, y, z] = position.current
-      const distance = 6 // Distance from player
-      const height = 4   // Height above player
-      
-      // Calculate camera position using angle
-      const cameraX = x + Math.sin(cameraAngle.current) * distance
-      const cameraZ = z + Math.cos(cameraAngle.current) * distance
-      
-      // Set camera position and look at player
-      camera.position.set(cameraX, y + height, cameraZ)
-      camera.lookAt(x, y, z)
-    }
-  })
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
   
   return (
-    <Box 
-      ref={cubeRef} 
-      castShadow 
-      receiveShadow
-    >
-      <meshStandardMaterial color="royalblue" />
-    </Box>
-  )
-}
-
-// Toggle button for camera follow mode
-function CameraFollowToggle({ isFollowing, setIsFollowing }) {
-  return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <div style={{
-        position: 'absolute',
-        top: '20px',
-        right: '20px',
-        pointerEvents: 'auto'
-      }}>
-        <button
-          onClick={() => setIsFollowing(!isFollowing)}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: isFollowing ? '#4CAF50' : '#f44336',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Camera Follow: {isFollowing ? 'ON' : 'OFF'}
-        </button>
-      </div>
-    </Html>
-  )
-}
-
-// Controls instructions - Updated with camera pivot instructions
-function ControlsInfo() {
-  return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <div style={{
-        position: 'absolute',
-        top: '20px',
-        left: '20px',
-        background: 'rgba(0,0,0,0.7)',
-        color: 'white',
-        padding: '10px',
-        borderRadius: '5px'
-      }}>
-        <h3 style={{ margin: '0 0 10px 0' }}>Controls:</h3>
-        <p style={{ margin: '5px 0' }}>W - Move forward</p>
-        <p style={{ margin: '5px 0' }}>S - Move backward</p>
-        <p style={{ margin: '5px 0' }}>A - Move left</p>
-        <p style={{ margin: '5px 0' }}>D - Move right</p>
-        <p style={{ margin: '5px 0', fontWeight: 'bold' }}>In follow mode:</p>
-        <p style={{ margin: '5px 0' }}>Q - Rotate camera left</p>
-        <p style={{ margin: '5px 0' }}>E - Rotate camera right</p>
-      </div>
-    </Html>
-  )
-}
-
-
-export default function App() {
-  const [cameraFollowMode, setCameraFollowMode] = useState(false)
-  // Define camera positions and the lookAt point
-  const cameraPositions = [
-    new Vector3(3, 3, 3),       // Initial position
-    new Vector3(-3, 2, 5),      // Position 2
-    new Vector3(5, 1, 0),       // Position 3
-    new Vector3(0, 5, 5),       // Position 4
-    new Vector3(0, 0.5, 10)     // Position 5
-  ]
-
-    // Define the point to look at (center of the scene)
-    const lookAtPoint = new Vector3(0, 0, 0)
-  
-  return (
-    <div style={{ width: '100vw', height: '100vh' }}>
-      <Canvas camera={{ position: [3, 3, 3], fov: 50 }}>
-         {/* Camera Controller */}
-         {/* Only show camera controller when not in follow mode */}
-        {!cameraFollowMode && (
-          <CameraController 
-            cameraPositions={cameraPositions} 
-            lookAtPoint={lookAtPoint} 
-          />
-        )}
-        <CameraFollowToggle 
-          isFollowing={cameraFollowMode} 
-          setIsFollowing={setCameraFollowMode} 
-        />
-        <ControlsInfo />
+    <div style={{ 
+      width: '100vw', 
+      height: '100vh', 
+      margin: 0, 
+      padding: 0,
+      overflow: 'hidden',
+      position: 'absolute',
+      top: 0,
+      left: 0
+    }}>
+      <Canvas 
+        shadows 
+        camera={{ position: [0, 0, 2], fov: 50 }}
+        gl={{ antialias: true }}
+      >
+        {/* Performance stats - toggle with 'S' key */}
+        {showStats && <Stats />}
         
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} />
-
-        <Physics gravity={[0, -9.8, 0]}>
-          <Ground />
-          <PlayerCube followCamera={cameraFollowMode} />
-        </Physics>
-
-
-        <Box position={[-1.2, 0, 0]}>
-          <meshStandardMaterial color="orange" />
-        </Box>
-        <Box position={[1.2, 0, 0]}>
-          <meshStandardMaterial color="hotpink" />
-        </Box>
-        <DraggableBox />
-        <InteractiveBox />
-        <RotatingBox />
-        <RotatingModel url="/models/free_car_001.gltf" />
-
-        <OrbitControls enabled={!cameraFollowMode} makeDefault />
+        {/* Night sky with stars */}
+        <color attach="background" args={['#020209']} />
+        <fog attach="fog" args={['#020209', 10, 50]} />
+        <Stars 
+          radius={100} 
+          depth={50} 
+          count={5000} 
+          factor={4} 
+          saturation={0}
+          fade
+        />
+        
+        {/* Ambient lighting */}
+        <ambientLight intensity={0.5} color="#ffffff" />
+        
+        {/* Slideshow component */}
+        <Slideshow />
       </Canvas>
     </div>
   )
